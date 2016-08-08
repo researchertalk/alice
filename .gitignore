@@ -1,0 +1,11 @@
+*.sw?
+.idea
+.DS_Store
+.vagrant
+node_modules
+npm-debug.log
+tmp
+lib
+
+test/bench/temp
+test/coverage/*
