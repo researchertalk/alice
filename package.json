@@ -37,7 +37,6 @@
     "babel-preset-stage-3": "^6.11.0",
     "babel-register": "^6.11.6",
     "chai": "^3.5.0",
-    "chai-factories": "^0.1.0",
     "eslint": "^3.2.2",
     "eslint-config-airbnb-base": "^5.0.1",
     "eslint-plugin-babel": "^3.3.0",
@@ -45,7 +44,6 @@
     "faker": "^3.1.0",
     "istanbul": "^0.4.4",
     "mocha": "^2.5.3",
-    "mock-knex": "^0.3.2",
     "source-map-support": "^0.4.2"
   },
   "license": "GPL-3.0"
