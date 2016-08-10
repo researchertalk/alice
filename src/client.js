@@ -33,7 +33,7 @@ export default class Client {
       queue,
       data: payload,
       sentAt: moment.now(),
-      timezone: moment.defaultTimezone(),
+      timezone: moment.defaultZone,
     };
   }
 
@@ -46,7 +46,7 @@ export default class Client {
    */
   async produceDirectExchange({ qId, queue, payload }) {
     try {
-      const client = await this.connection();
+      const client = await this.connection;
       const channel = await client.createChannel();
       const queueName = queue + _.isEmpty(qId) ? '' : `.${qId}`;
 
@@ -70,14 +70,15 @@ export default class Client {
    */
   async consumeDirectExchange({ qId, queue }) {
     try {
-      const client = await this.connection();
+      const client = await this.connection;
       const channel = await client.createChannel();
-      const queueName = queue + _.isEmpty(qId) ? '' : `.${qId}`;
+      const queueName = queue + (_.isEmpty(qId) ? '' : `.${qId}`);
+
       await channel.assertQueue(queueName);
 
       const message = await channel.consume(queueName);
       // NOTICEME: Should we do this?
-      message.content = JSON.parse(message.content);
+      message.content = JSON.parse(message.content.toString());
 
       return message;
     } catch (err) {
