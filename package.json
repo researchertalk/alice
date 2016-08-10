@@ -14,6 +14,7 @@
     "babel": "babel -D src/ --out-dir lib/ --source-maps inline",
     "dev": "babel -w -D src/ --out-dir lib/ --source-maps inline",
     "lint": "eslint src/**",
+    "postinstall": "npm run babel",
     "test": "npm run lint && npm run babel && istanbul --config=test/.istanbul.yml cover node_modules/mocha/bin/_mocha -- --check-leaks -b -R spec test/index.js"
   },
   "dependencies": {
