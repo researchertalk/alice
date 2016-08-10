@@ -30,19 +30,22 @@ export default class Router {
    * @return {string} Transformed path separator.
    */
   transformPath(queue) {
-    const queuePath = queue.replace(/$\//, '');
-    return queuePath.replace('/', '.');
+    const queuePath = queue.replace(/^\//, '');
+    return queuePath.replace(/\//g, '.');
   }
 
   /**
    * Register/hook to client connection. Other means register route to exchange.
    * @param {object} client - Alice client instance object.
    */
-  async registerTo(client) {
+  registerTo(client) {
     for (const route of this.routes) {
       const routePath = this.transformPath(`${this.baseQueueName}` +
-        `/${route.queue}`);
-      client.dynamicConsumerBinding(routePath, route.handler);
+        `${route.queue}`);
+      client.dynamicConsumerBinding({
+        queue: routePath,
+        fn: route.handler,
+      });
     }
   }
 }
