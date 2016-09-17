@@ -13,9 +13,9 @@ export default class Client {
 
   /**
    * Constructor
-   * @param {string} options.url - AMQP url (e.g amqp://url)
+   * @param {string} url - AMQP url (e.g amqp://url)
    */
-  constructor({ url = process.env.AMQP_URL }) {
+  constructor(url = process.env.AMQP_URL) {
     const amqpUrl = url || 'amqp://localhost';
     this.connection = amqplib.connect(amqpUrl);
   }

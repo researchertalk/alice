@@ -1,7 +1,8 @@
 {
+  "sourceMaps": "inline",
   "presets": [
-    "stage-3",
-    ["es2015", { "loose": true, "modules": "commonjs" }]
+    ["es2015", { "loose": true, "modules": "commonjs" }],
+    ["es2017"],
   ],
   "plugins": [
     ["transform-runtime", {
