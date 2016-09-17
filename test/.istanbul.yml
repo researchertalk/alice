@@ -1,2 +1,3 @@
 reporting:
+  print: detail
   dir: ./test/coverage

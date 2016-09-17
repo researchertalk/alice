@@ -21,8 +21,14 @@ describe('client', function testCase() {
     done();
   });
 
-  it('can be instantiated', function assertion(done) {
+  it('can be instantiated: with non-default amqp url', function assertion(done) {
     const client = new Client('amqp://localhost');
+    assert.instanceOf(client, Client);
+    done();
+  });
+
+  it('can be instantiated: with default amqp url', function assertion(done) {
+    const client = new Client();
     assert.instanceOf(client, Client);
     done();
   });
