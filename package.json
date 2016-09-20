@@ -47,5 +47,9 @@
     "mocking-rabbit": "git+ssh://git@gitlab.com/researcher/mocking-rabbit.git",
     "source-map-support": "^0.4.2"
   },
+  "repository": {
+    "type": "git",
+    "url": "git@gitlab.com:researcher/alice.git"
+  },
   "license": "GPL-3.0"
 }
