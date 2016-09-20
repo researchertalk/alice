@@ -1,137 +1,96 @@
 
-import _ from 'lodash';
-import uuid from 'uuid';
 import amqplib from 'amqplib';
-import moment from 'moment-timezone';
 
-moment.tz.setDefault(process.env.TIMEZONE || 'Asia/Jakarta');
+let connection = null;
 
-/**
- * Class representing amqp client
- */
 export default class Client {
-
-  /**
-   * Constructor
-   * @param {string} url - AMQP url (e.g amqp://url)
-   */
-  constructor(url = process.env.AMQP_URL) {
-    const amqpUrl = url || 'amqp://localhost';
-    this.connection = amqplib.connect(amqpUrl);
-  }
-
-  /**
-   * Payload wrapper
-   * @param {string} options.qId - Auto generated queue id (using uuid version 4).
-   * @param {string} options.queue - Queue name.
-   * @param {string} options.payload - Message payload.
-   * @return {object} - Wrapped payload with qId and timestamp.
-   */
-  wrapper({ qId, queue, payload }) {
-    return {
-      qId,
-      queue,
-      data: payload,
-      sentAt: moment.now(),
-      timezone: moment.defaultZone,
-    };
-  }
-
-  /**
-   * Produce direct exchange.
-   * @param {string} options.qId - Auto generated queue id (using uuid version 4).
-   * @param {queue} options.queue - Queue name.
-   * @param {payload} options.payload - Message payload.
-   * @return {boolean} Acknowledgement status.
-   */
-  async produceDirectExchange({ qId, queue, payload }) {
+  static async connect(url = process.env.AMQP_URL) {
     try {
-      const client = await this.connection;
-      const channel = await client.createChannel();
-      const queueName = queue + _.isEmpty(qId) ? '' : `.${qId}`;
+      const amqpurl = url || 'amqp://localhost';
+      connection = await amqplib.connect(amqpurl);
 
-      await channel.assertQueue(queueName);
-
-      const wrapped = JSON.stringify(this.wrapper({ qId, queue, payload }));
-      const buffer = new Buffer(wrapped);
-      const ack = await channel.sendToQueue(queueName, buffer);
-
-      return ack;
+      return connection;
     } catch (err) {
-      return err;
+      throw err;
     }
   }
 
-  /**
-   * Consumer direct exchange
-   * @param {string} options.qId - Auto generated queue id (using uuid version 4).
-   * @param {queue} options.queue - Queue name.
-   * @return {object} Message payload with parsed content.
-   */
-  async consumeDirectExchange({ qId, queue }) {
+  static connection() {
+    return connection;
+  }
+
+  static async disconnect() {
     try {
-      const client = await this.connection;
-      const channel = await client.createChannel();
-      const queueName = queue + (_.isEmpty(qId) ? '' : `.${qId}`);
+      await connection.close();
 
-      await channel.assertQueue(queueName);
+      connection = null;
 
-      const message = await channel.consume(queueName);
-      // NOTICEME: Should we do this?
-      message.content = JSON.parse(message.content.toString());
-
-      return message;
+      return connection;
     } catch (err) {
-      return err;
+      throw err;
     }
   }
 
-  // FIXME: should have better semantic
-  /**
-   * Dynamic producer binding. Produce message and wait for the response binding.
-   * @param {queue} options.queue - Queue name.
-   * @param {payload} options.payload - Message payload.
-   * @return {object} Message payload with parsed content.
-   */
-  async dynamicProducerBinding({ queue, payload }) {
+  static async consume({ exchange, type, queue, routingKey }, handler, options) {
     try {
-      const qId = uuid.v4();
-      // FIXME: should we wait or dispatch immediately without acknowledgement?
-      this.produceDirectExchange({ qId, queue, payload });
-      const message = await this.consumeDirectExchange({ qId, queue });
+      const channel = await connection.createChannel();
 
-      return message;
+      await channel.assertExchange(exchange, type);
+      await channel.assertQueue(queue);
+      await channel.bindQueue(queue, exchange, routingKey);
+
+      const message = await channel.consume(queue, options);
+
+      const context = {};
+      context.body = JSON.parse(message.content.toString());
+      context.fields = message.fields;
+      context.properties = message.properties;
+
+      Object.assign(context, this);
+
+      return await handler(context);
     } catch (err) {
-      return err;
+      throw err;
     }
   }
 
-  // FIXME: should have better semantic
-  /**
-   * Dynamic consumer binding. It is like tradionation http route binding.
-   * @param {queue} options.queue - Queue name.
-   * @param {payload} options.payload - Message payload.
-   * @param {function} options.fn - Payload producer function. Must return promise.
-   * @return {boolean} Acknowledgement status
-   */
-  async dynamicConsumerBinding({ queue, payload, fn }) {
+  static async consumeDirect({ exchange, queue, routingKey }, handler, options) {
+    return await this.consume({ exchange, queue, routingKey, type: 'direct' }, handler, options);
+  }
+
+  static async consumeFanout({ exchange, queue }, handler, options) {
+    return await this.consume({ exchange, queue, type: 'fanout' }, handler, options);
+  }
+
+  static async consumeTopic({ exchange, queue, routingKey }, handler, options) {
+    return await this.consume({ exchange, queue, routingKey, type: 'topic' }, handler, options);
+  }
+
+  // missing exchange durable options
+  static async publish({ exchange, type, routingKey, content }, options) {
     try {
-      const message = await this.consumeDirectExchange({ queue });
+      const channel = await connection.createChannel();
 
-      let data = payload;
-      if (_.isFunction(fn)) {
-        data = await fn(message);
-      }
+      await channel.assertExchange(exchange, type);
 
-      const ack = await this.produceDirectExchange({
-        queue,
-        payload: data,
-        qId: message.content.qId,
-      });
+      const contentBuffer = new Buffer(JSON.stringify(content));
+      channel.publish(exchange, routingKey, contentBuffer, options);
 
-      return ack;
+      return channel.close();
     } catch (err) {
-      return err;
+      throw err;
     }
+  }
+
+  static async publishDirect({ exchange, routingKey, content }, options) {
+    return await this.publish({ exchange, routingKey, content, type: 'direct' }, options);
+  }
+
+  static async publishFanout({ exchange, content }, options) {
+    return await this.publish({ exchange, content, type: 'fanout', routingKey: '' }, options);
+  }
+
+  static async publishTopic({ exchange, routingKey, content }, options) {
+    return await this.publish({ exchange, routingKey, content, type: 'topic' }, options);
   }
 }
