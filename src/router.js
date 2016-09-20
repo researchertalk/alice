@@ -1,51 +1,53 @@
 
-/**
- * Class representing router.
- */
+import Client from './client';
+
 export default class Router {
-
-  /**
-   * Constructor
-   * @param {string} baseQueueName - Base queue name.
-   */
-  constructor(baseQueueName) {
-    this.baseQueueName = baseQueueName;
-    this.routes = [];
+  constructor(baseRoutingKey) {
+    this.baseRoutingKey = baseRoutingKey;
   }
 
-  /**
-   * Bind a queue path. Like a traditional route path binding.
-   * @param {string} queue - Queue path (e.g /context/topic or context.topic).
-   * Queue path then will be transformed to use standard dot path separator (.)
-   * @param {string} handler - Function handler when queue path recieved a message.
-   * It is payload producer in client.dynamicConsumerBinding
-   */
-  bind(queue, handler) {
-    this.routes.push({ queue, handler });
+  transformPath(route) {
+    const routePath = `${this.baseRoutingKey}${route}`.replace(/^\//, '');
+
+    return routePath.replace(/\//g, '.');
   }
 
-  /**
-   * Transform path separator. Ex. /context/topic into context.topic
-   * @param {string} queue - Queue path (e.g /context/topic or context.topic).
-   * @return {string} Transformed path separator.
-   */
-  transformPath(queue) {
-    const queuePath = queue.replace(/^\//, '');
-    return queuePath.replace(/\//g, '.');
+  process(handlers) {
+    return async (result) => {
+      const next = async () => {
+        const handler = handlers.shift();
+
+        if (!handler) {
+          return null;
+        }
+
+        return await handler(result, next);
+      };
+
+      return await next();
+    };
   }
 
-  /**
-   * Register/hook to client connection. Other means register route to exchange.
-   * @param {object} client - Alice client instance object.
-   */
-  registerTo(client) {
-    for (const route of this.routes) {
-      const routePath = this.transformPath(`${this.baseQueueName}` +
-        `${route.queue}`);
-      client.dynamicConsumerBinding({
-        queue: routePath,
-        fn: route.handler,
-      });
-    }
+  async direct({ exchange, queue, route, options }, handlers) {
+    return await Client.consumeDirect({
+      exchange,
+      queue,
+      routingKey: this.transformPath,
+    }, this.process(handlers), options);
+  }
+
+  async fanout({ exchange, queue, options }, handlers) {
+    return await Client.consumeDirect({
+      exchange,
+      queue,
+    }, this.process(handlers), options);
+  }
+
+  async topic({ exchange, queue, route, options }, handlers) {
+    return await Client.consumeDirect({
+      exchange,
+      queue,
+      routingKey: this.transformPath,
+    }, this.process(handlers), options);
   }
 }

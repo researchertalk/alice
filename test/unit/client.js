@@ -13,173 +13,260 @@ mockery.registerMock('amqplib', mockAmqplib);
 const Client = require('./../../lib/client').default;
 
 describe('client', function testCase() {
-  before(function setup(done) {
+  afterEach(function setup(done) {
+    if (Client.connection()) {
+      return Client.disconnect()
+        .then(done)
+        .catch(done);
+    }
+
+    return done();
+  });
+
+  it('Client is static class', function assertion(done) {
+    assert.isFunction(Client);
+    assert.isFunction(Client.connect);
+
     done();
   });
 
-  after(function teardown(done) {
-    done();
+  it('connect(): connection is shared when succeed', function assertion(done) {
+    assert.isFunction(Client.connect);
+
+    // eslint-disable-next-line global-require
+    const ClientReRequire = require('./../../lib/client').default;
+
+    assert.isNull(ClientReRequire.connection());
+
+    Client.connect()
+      .then(function successResult(connection) {
+        assert.deepEqual(connection, ClientReRequire.connection());
+
+        done();
+      })
+      .catch(done);
   });
 
-  it('can be instantiated: with non-default amqp url', function assertion(done) {
-    const client = new Client('amqp://localhost');
-    assert.instanceOf(client, Client);
-    done();
+  it('publish()', function assertion(done) {
+    assert.isFunction(Client.publish);
+
+    Client.connect()
+      .then(function connected() {
+        return Client.publish({
+          exchange: 'exchange',
+          type: 'direct',
+          routingKey: 'route',
+          content: 'content',
+        });
+      })
+      .then(function published(result) {
+        assert.isTrue(result);
+
+        done();
+      })
+      .catch(done);
   });
 
-  it('can be instantiated: with default amqp url', function assertion(done) {
-    const client = new Client();
-    assert.instanceOf(client, Client);
-    done();
+  it('publishDirect()', function assertion(done) {
+    assert.isFunction(Client.publishDirect);
+
+    Client.connect()
+      .then(function connected() {
+        return Client.publishDirect({
+          exchange: 'exchange',
+          routingKey: 'route',
+          content: 'content',
+        });
+      })
+      .then(function publishedDirect(result) {
+        assert.isTrue(result);
+
+        done();
+      })
+      .catch(done);
   });
 
-  it('should have promisable connection as initial property',
-    function assertion(done) {
-      const client = new Client('amqp://localhost');
-      assert.isFunction(client.connection.then);
-      done();
-    });
+  it('publishFanout()', function assertion(done) {
+    assert.isFunction(Client.publishFanout);
 
-  it('wrapper() should have give wrapped object', function assertion(done) {
-    const client = new Client('amqp://localhost');
-    const result = client.wrapper({
+    Client.connect()
+      .then(function connected() {
+        return Client.publishFanout({
+          exchange: 'exchange',
+          content: 'content',
+        });
+      })
+      .then(function publishedFanout(result) {
+        assert.isTrue(result);
+
+        done();
+      })
+      .catch(done);
+  });
+
+  it('publishTopic()', function assertion(done) {
+    assert.isFunction(Client.publishTopic);
+
+    Client.connect()
+      .then(function connected() {
+        return Client.publishTopic({
+          exchange: 'exchange',
+          routingKey: 'route',
+          content: 'content',
+        });
+      })
+      .then(function publishedTopic(result) {
+        assert.isTrue(result);
+
+        done();
+      })
+      .catch(done);
+  });
+
+  it('consume()', function assertion(done) {
+    assert.isFunction(Client.consume);
+
+    const data = {
       qId: 'queue-id',
       queue: 'queue',
       payload: 'payload',
+    };
+
+    tracker.install();
+    tracker.on('consume', function tracking(consume) {
+      assert.equal(consume.queue, 'queue');
+      consume.response({
+        content: new Buffer(JSON.stringify(data)),
+        fields: {},
+        properties: {},
+      });
     });
 
-    assert.property(result, 'qId');
-    assert.property(result, 'queue');
-    assert.property(result, 'data');
-    assert.property(result, 'sentAt');
-    assert.property(result, 'timezone');
-    done();
+    Client.connect()
+      .then(function connected() {
+        return Client.consume({
+          exchange: 'exchange',
+          type: 'direct',
+          queue: 'queue',
+          routingKey: 'route',
+        }, function handler(context) {
+          assert.deepEqual(data, context.body);
+          assert.isFunction(context.publish);
+
+          done();
+        });
+      })
+      .catch(done);
   });
 
-  it('produceDirectExchange() should publish message and wait for acknowledge',
-    function assertion(done) {
-      const client = new Client('amqp://localhost');
-      const data = {
-        qId: 'queue-id',
-        queue: 'queue',
-        payload: 'payload',
-      };
+  it('consumeDirect()', function assertion(done) {
+    assert.isFunction(Client.consumeDirect);
 
-      client.produceDirectExchange(data)
-        .then(function waitingForAcknowledgement(result) {
-          assert.isTrue(result);
-          done();
-        })
-        .catch(done);
+    const data = {
+      qId: 'queue-id',
+      queue: 'queue',
+      payload: 'payload',
+    };
+
+    tracker.install();
+    tracker.on('consume', function tracking(consume) {
+      assert.equal(consume.queue, 'queue');
+      consume.response({
+        content: new Buffer(JSON.stringify(data)),
+        fields: {},
+        properties: {},
+      });
     });
 
-  it('consumeDirectExchange() should subscribe and wait for incoming message',
-    function assertion(done) {
-      const client = new Client('amqp://localhost');
-      const data = {
-        qId: 'queue-id',
-        queue: 'queue',
-        payload: 'payload',
-      };
+    Client.connect()
+      .then(function connected() {
+        return Client.consumeDirect({
+          exchange: 'exchange',
+          type: 'direct',
+          queue: 'queue',
+          routingKey: 'route',
+        }, function handler(context) {
+          assert.deepEqual(data, context.body);
+          assert.isFunction(context.publish);
 
-      tracker.install();
-      tracker.on('consume', function tracking(consume) {
-        assert.equal(consume.queue, 'aQueue');
-        consume.response({
-          content: new Buffer(JSON.stringify(data)),
-        });
-      });
-
-      client.consumeDirectExchange({ queue: 'aQueue' })
-        .then(function waitingForMessage(message) {
-          assert.equal(message.content.payload, 'payload');
           tracker.uninstall();
+
           done();
-        })
-        .catch(done);
-    });
-
-  it('dynamicProducerBinding() should publish and waiting for incoming message',
-    function assertion(done) {
-      const client = new Client('amqp://localhost');
-      const data = {
-        qId: 'queue-id',
-        queue: 'aQueue',
-        payload: 'payload',
-      };
-
-      tracker.install();
-      tracker.on('consume', function tracking(consume) {
-        assert.match(consume.queue, /^aQueue/);
-        consume.response({
-          content: new Buffer(JSON.stringify(data)),
         });
-      });
-
-      client.dynamicProducerBinding(data)
-        .then(function waitingForMessage(message) {
-          assert.isString(message.content.qId);
-          assert.equal(message.content.payload, 'payload');
-          tracker.uninstall();
-          done();
-        })
-        .catch(done);
-    });
-
-  it('dynamicConsumerBinding() should publish and waiting for incoming message',
-    function assertion(done) {
-      const client = new Client('amqp://localhost');
-      const data = {
-        qId: 'queue-id',
-        queue: 'aQueue',
-        payload: 'payload',
-      };
-
-      tracker.install();
-      tracker.on('consume', function tracking(consume) {
-        assert.match(consume.queue, /^aQueue/);
-        consume.response({
-          content: new Buffer(JSON.stringify(data)),
-        });
-      });
-
-      client.dynamicConsumerBinding(data)
-        .then(function waitingForAcknowledgement(result) {
-          assert.isTrue(result);
-          tracker.uninstall();
-          done();
-        })
-        .catch(done);
-    });
-
-  it('dynamicConsumerBinding() with payload producer function',
-    function assertion(done) {
-      const client = new Client('amqp://localhost');
-      const data = {
-        qId: 'queue-id',
-        queue: 'aQueue',
-        payload: 'payload',
-      };
-
-      tracker.install();
-      tracker.on('consume', function tracking(consume) {
-        assert.match(consume.queue, /^aQueue/);
-        consume.response({
-          content: new Buffer(JSON.stringify(data)),
-        });
-      });
-
-      client.dynamicConsumerBinding({
-        queue: data.queue,
-        fn: function payloadProducer(message) {
-          return message;
-        },
       })
-        .then(function waitingForAcknowledgement(result) {
-          assert.isTrue(result);
-          tracker.uninstall();
-          done();
-        })
-        .catch(done);
+      .catch(done);
+  });
+
+  it('consumeFanout()', function assertion(done) {
+    assert.isFunction(Client.consumeFanout);
+
+    const data = {
+      qId: 'queue-id',
+      queue: 'queue',
+      payload: 'payload',
+    };
+
+    tracker.install();
+    tracker.on('consume', function tracking(consume) {
+      assert.equal(consume.queue, 'queue');
+      consume.response({
+        content: new Buffer(JSON.stringify(data)),
+        fields: {},
+        properties: {},
+      });
     });
+
+    Client.connect()
+      .then(function connected() {
+        return Client.consumeFanout({
+          exchange: 'exchange',
+          queue: 'queue',
+        }, function handler(context) {
+          assert.deepEqual(data, context.body);
+          assert.isFunction(context.publish);
+
+          tracker.uninstall();
+
+          done();
+        });
+      })
+      .catch(done);
+  });
+
+  it('consumeTopic()', function assertion(done) {
+    assert.isFunction(Client.consumeTopic);
+
+    const data = {
+      qId: 'queue-id',
+      queue: 'queue',
+      payload: 'payload',
+    };
+
+    tracker.install();
+    tracker.on('consume', function tracking(consume) {
+      assert.equal(consume.queue, 'queue');
+      consume.response({
+        content: new Buffer(JSON.stringify(data)),
+        fields: {},
+        properties: {},
+      });
+    });
+
+    Client.connect()
+      .then(function connected() {
+        return Client.consumeTopic({
+          exchange: 'exchange',
+          queue: 'queue',
+          routingKey: 'route',
+        }, function handler(context) {
+          assert.deepEqual(data, context.body);
+          assert.isFunction(context.publish);
+
+          tracker.uninstall();
+
+          done();
+        });
+      })
+      .catch(done);
+  });
 });
