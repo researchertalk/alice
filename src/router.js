@@ -1,9 +1,23 @@
 
+import _ from 'lodash';
 import Client from './client';
 
 export default class Router {
   constructor(baseRoutingKey) {
     this.baseRoutingKey = baseRoutingKey;
+    this.middlewares = [];
+  }
+
+  use(middlewares) {
+    if (_.isArray(middlewares)) {
+      this.middlewares = this.middlewares.concat(middlewares);
+
+      return this.middlewares;
+    }
+
+    this.middlewares.push(middlewares);
+
+    return this.middlewares;
   }
 
   transformPath(route) {
@@ -12,35 +26,19 @@ export default class Router {
     return routePath.replace(/\//g, '.');
   }
 
-  process(handlers) {
-    return async (result) => {
-      const next = async () => {
-        const handler = handlers.shift();
-
-        if (!handler) {
-          return null;
-        }
-
-        return await handler(result, next);
-      };
-
-      return await next();
-    };
-  }
-
   async direct({ exchange, queue, route, options }, handlers) {
     return await Client.consumeDirect({
       exchange,
       queue,
       routingKey: this.transformPath,
-    }, this.process(handlers), options);
+    }, Client.process(this.middlewares.concat(handlers)), options);
   }
 
   async fanout({ exchange, queue, options }, handlers) {
     return await Client.consumeDirect({
       exchange,
       queue,
-    }, this.process(handlers), options);
+    }, Client.process(this.middlewares.concat(handlers)), options);
   }
 
   async topic({ exchange, queue, route, options }, handlers) {
@@ -48,6 +46,6 @@ export default class Router {
       exchange,
       queue,
       routingKey: this.transformPath,
-    }, this.process(handlers), options);
+    }, Client.process(this.middlewares.concat(handlers)), options);
   }
 }

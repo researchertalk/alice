@@ -47,6 +47,91 @@ describe('client', function testCase() {
       .catch(done);
   });
 
+  it('registerConsumerMiddleware: array of middlewares', function assertion(done) {
+    Client.registerConsumerMiddleware([function a() {}, function b() {}]);
+
+    assert.isArray(Client.getConsumerMiddlewares());
+    assert.lengthOf(Client.getConsumerMiddlewares(), 2);
+
+    Client.setConsumerMiddlewares([]);
+
+    done();
+  });
+
+  it('registerConsumerMiddleware: single non-array middlewares', function assertion(done) {
+    Client.registerConsumerMiddleware(function a() {});
+
+    assert.isArray(Client.getConsumerMiddlewares());
+    assert.lengthOf(Client.getConsumerMiddlewares(), 1);
+
+    Client.setConsumerMiddlewares([]);
+
+    done();
+  });
+
+  it('process()', function assertion(done) {
+    assert.isFunction(Client.process);
+
+    const proceed = [];
+
+    const fnA = function fnA(result, next) {
+      const fnAPromisified = new Promise(function promise(resolve) {
+        setTimeout(function timeout() {
+          resolve(`A: ${result}`);
+        }, 300);
+      });
+
+      return fnAPromisified
+        .then(function successResult() {
+          assert.deepEqual(proceed, []);
+          proceed.push('A');
+
+          return next();
+        });
+    };
+
+    const fnB = function fnB(result, next) {
+      const fnBPromisified = new Promise(function promise(resolve) {
+        setTimeout(function timeout() {
+          resolve(`B: ${result}`);
+        }, 200);
+      });
+
+      return fnBPromisified
+        .then(function successResult() {
+          assert.deepEqual(proceed, ['A']);
+          proceed.push('B');
+
+          return next();
+        });
+    };
+
+    const fnC = function fnC(result, next) {
+      const fnCPromisified = new Promise(function promise(resolve) {
+        setTimeout(function timeout() {
+          resolve(`C: ${result}`);
+        }, 100);
+      });
+
+      return fnCPromisified
+        .then(function successResult() {
+          assert.deepEqual(proceed, ['A', 'B']);
+          proceed.push('C');
+
+          return next();
+        });
+    };
+
+    Client.process([fnA, fnB, fnC])('result')
+      .then(function successResult(result) {
+        assert.isNull(result);
+        assert.deepEqual(proceed, ['A', 'B', 'C']);
+
+        done();
+      })
+      .catch(done);
+  });
+
   it('publish()', function assertion(done) {
     assert.isFunction(Client.publish);
 
@@ -149,11 +234,11 @@ describe('client', function testCase() {
           type: 'direct',
           queue: 'queue',
           routingKey: 'route',
-        }, function handler(context) {
-          assert.deepEqual(data, context.body);
+        }, function handler(context, next) {
+          assert.deepEqual(data, context.content);
           assert.isFunction(context.publish);
 
-          done();
+          return next().then(done);
         });
       })
       .catch(done);
@@ -185,13 +270,13 @@ describe('client', function testCase() {
           type: 'direct',
           queue: 'queue',
           routingKey: 'route',
-        }, function handler(context) {
-          assert.deepEqual(data, context.body);
+        }, function handler(context, next) {
+          assert.deepEqual(data, context.content);
           assert.isFunction(context.publish);
 
           tracker.uninstall();
 
-          done();
+          return next().then(done);
         });
       })
       .catch(done);
@@ -221,13 +306,13 @@ describe('client', function testCase() {
         return Client.consumeFanout({
           exchange: 'exchange',
           queue: 'queue',
-        }, function handler(context) {
-          assert.deepEqual(data, context.body);
+        }, function handler(context, next) {
+          assert.deepEqual(data, context.content);
           assert.isFunction(context.publish);
 
           tracker.uninstall();
 
-          done();
+          return next().then(done);
         });
       })
       .catch(done);
@@ -258,13 +343,13 @@ describe('client', function testCase() {
           exchange: 'exchange',
           queue: 'queue',
           routingKey: 'route',
-        }, function handler(context) {
-          assert.deepEqual(data, context.body);
+        }, function handler(context, next) {
+          assert.deepEqual(data, context.content);
           assert.isFunction(context.publish);
 
           tracker.uninstall();
 
-          done();
+          return next().then(done);
         });
       })
       .catch(done);
