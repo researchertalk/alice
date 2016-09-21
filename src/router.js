@@ -35,14 +35,14 @@ export default class Router {
   }
 
   async fanout({ exchange, queue, options }, handlers) {
-    return await Client.consumeDirect({
+    return await Client.consumeFanout({
       exchange,
       queue,
     }, Client.process(this.middlewares.concat(handlers)), options);
   }
 
   async topic({ exchange, queue, route, options }, handlers) {
-    return await Client.consumeDirect({
+    return await Client.consumeTopic({
       exchange,
       queue,
       routingKey: this.transformPath,
