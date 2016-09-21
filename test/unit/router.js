@@ -32,6 +32,26 @@ describe('router', function testCase() {
     done();
   });
 
+  it('use: array of middlewares', function assertion(done) {
+    const router = new Router('base');
+    router.use([function a() {}, function b() {}]);
+
+    assert.isArray(router.middlewares);
+    assert.lengthOf(router.middlewares, 2);
+
+    done();
+  });
+
+  it('use: single non-array middlewares', function assertion(done) {
+    const router = new Router('base');
+    router.use(function a() {});
+
+    assert.isArray(router.middlewares);
+    assert.lengthOf(router.middlewares, 1);
+
+    done();
+  });
+
   it('transformPath()', function assertion(done) {
     const router = new Router('base');
 
@@ -42,71 +62,6 @@ describe('router', function testCase() {
     assert.equal(path, 'base.path');
 
     done();
-  });
-
-  it('process()', function assertion(done) {
-    const router = new Router('base');
-
-    assert.isFunction(router.process);
-
-    const proceed = [];
-
-    const fnA = function fnA(result, next) {
-      const fnAPromisified = new Promise(function promise(resolve) {
-        setTimeout(function timeout() {
-          resolve(`A: ${result}`);
-        }, 300);
-      });
-
-      return fnAPromisified
-        .then(function successResult() {
-          assert.deepEqual(proceed, []);
-          proceed.push('A');
-
-          return next();
-        });
-    };
-
-    const fnB = function fnB(result, next) {
-      const fnBPromisified = new Promise(function promise(resolve) {
-        setTimeout(function timeout() {
-          resolve(`B: ${result}`);
-        }, 200);
-      });
-
-      return fnBPromisified
-        .then(function successResult() {
-          assert.deepEqual(proceed, ['A']);
-          proceed.push('B');
-
-          return next();
-        });
-    };
-
-    const fnC = function fnC(result, next) {
-      const fnCPromisified = new Promise(function promise(resolve) {
-        setTimeout(function timeout() {
-          resolve(`C: ${result}`);
-        }, 100);
-      });
-
-      return fnCPromisified
-        .then(function successResult() {
-          assert.deepEqual(proceed, ['A', 'B']);
-          proceed.push('C');
-
-          return next();
-        });
-    };
-
-    router.process([fnA, fnB, fnC])('result')
-      .then(function successResult(result) {
-        assert.isNull(result);
-        assert.deepEqual(proceed, ['A', 'B', 'C']);
-
-        done();
-      })
-      .catch(done);
   });
 
   it('direct()', function assertion(done) {
@@ -136,7 +91,7 @@ describe('router', function testCase() {
       routingKey: 'route',
     }, [
       function handler(context, next) {
-        assert.deepEqual(data, context.body);
+        assert.deepEqual(data, context.content);
         assert.isFunction(context.publish);
 
         tracker.uninstall();
@@ -174,7 +129,7 @@ describe('router', function testCase() {
       queue: 'queue',
     }, [
       function handler(context, next) {
-        assert.deepEqual(data, context.body);
+        assert.deepEqual(data, context.content);
         assert.isFunction(context.publish);
 
         tracker.uninstall();
@@ -213,7 +168,7 @@ describe('router', function testCase() {
       routingKey: 'route',
     }, [
       function handler(context, next) {
-        assert.deepEqual(data, context.body);
+        assert.deepEqual(data, context.content);
         assert.isFunction(context.publish);
 
         tracker.uninstall();

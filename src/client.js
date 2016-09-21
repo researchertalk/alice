@@ -1,7 +1,9 @@
 
+import _ from 'lodash';
 import amqplib from 'amqplib';
 
 let connection = null;
+let consumerMiddlewares = [];
 
 export default class Client {
   static async connect(url = process.env.AMQP_URL) {
@@ -31,6 +33,47 @@ export default class Client {
     }
   }
 
+  static getConsumerMiddlewares() {
+    return consumerMiddlewares;
+  }
+
+  static setConsumerMiddlewares(middlewares) {
+    consumerMiddlewares = middlewares;
+
+    return consumerMiddlewares;
+  }
+
+  static registerConsumerMiddleware(middlewares) {
+    if (_.isArray(middlewares)) {
+      consumerMiddlewares = consumerMiddlewares.concat(middlewares);
+
+      return consumerMiddlewares;
+    }
+
+    consumerMiddlewares.push(middlewares);
+
+    return consumerMiddlewares;
+  }
+
+  static process(handlers) {
+    const resultInjector = async (result) => {
+      const fns = handlers || [];
+      const next = async () => {
+        const fn = fns.shift();
+
+        if (!fn) {
+          return null;
+        }
+
+        return await fn(result, next);
+      };
+
+      return await next();
+    };
+
+    return resultInjector;
+  }
+
   static async consume({ exchange, type, queue, routingKey }, handler, options) {
     try {
       const channel = await connection.createChannel();
@@ -42,13 +85,14 @@ export default class Client {
       const message = await channel.consume(queue, options);
 
       const context = {};
-      context.body = JSON.parse(message.content.toString());
+      context.content = JSON.parse(message.content.toString());
       context.fields = message.fields;
       context.properties = message.properties;
+      context.channel = channel;
 
       Object.assign(context, this);
 
-      return await handler(context);
+      return this.process(consumerMiddlewares.concat(handler))(context);
     } catch (err) {
       throw err;
     }
